@@ -1,75 +1,241 @@
-export default function Home() {
-  return (
-    <main className="min-h-screen bg-gray-50 p-8">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-8">
-          <p className="text-sm font-medium text-gray-500">2BIT AI</p>
+import StatCard from "@/components/dashboard/StatCard";
+import SectionHeader from "@/components/dashboard/SectionHeader";
+import StatusBadge from "@/components/dashboard/StatusBadge";
+import EmptyState from "@/components/dashboard/EmptyState";
+import { getDashboardData } from "@/lib/dashboardData";
 
-          <h1 className="mt-1 text-3xl font-bold text-gray-900">
-            Customer & Sales Agent
-          </h1>
+function formatDuration(seconds: number | null) {
+  if (!seconds) {
+    return "—";
+  }
 
-          <p className="mt-2 text-gray-600">
-            AI-powered customer communication platform
-          </p>
-        </div>
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
 
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-          <DashboardCard title="Calls" value="0" description="Total AI calls" />
-
-          <DashboardCard title="Leads" value="0" description="New leads" />
-
-          <DashboardCard
-            title="Appointments"
-            value="0"
-            description="Upcoming appointments"
-          />
-
-          <DashboardCard
-            title="AI Resolved"
-            value="0%"
-            description="Resolved without human"
-          />
-        </div>
-
-        <div className="mt-8 rounded-xl border bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-900">AI Agent</h2>
-
-          <div className="mt-4 flex items-center justify-between">
-            <div>
-              <p className="font-medium text-gray-900">Noura</p>
-
-              <p className="text-sm text-gray-500">
-                2Bit Motors Saudi - AI Sales Assistant
-              </p>
-            </div>
-
-            <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-medium text-green-700">
-              Active
-            </span>
-          </div>
-        </div>
-      </div>
-    </main>
-  );
+  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
 }
 
-function DashboardCard({
-  title,
-  value,
-  description,
-}: {
-  title: string;
-  value: string;
-  description: string;
-}) {
+function formatDate(dateString: string | null) {
+  if (!dateString) {
+    return "—";
+  }
+
+  return new Date(dateString).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function formatTime(timeString: string | null) {
+  if (!timeString) {
+    return "—";
+  }
+
+  const [hours, minutes] = timeString.split(":");
+
+  const date = new Date();
+
+  date.setHours(Number(hours));
+  date.setMinutes(Number(minutes));
+
+  return date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+export default async function HomePage() {
+  const data = await getDashboardData();
+
   return (
-    <div className="rounded-xl border bg-white p-6 shadow-sm">
-      <p className="text-sm font-medium text-gray-500">{title}</p>
+    <div>
+      <div className="mb-8">
+        <h2 className="text-2xl font-bold tracking-tight text-gray-900">
+          Overview
+        </h2>
 
-      <p className="mt-2 text-3xl font-bold text-gray-900">{value}</p>
+        <p className="mt-1 text-sm text-gray-500">
+          Monitor your AI customer and sales activity.
+        </p>
+      </div>
 
-      <p className="mt-1 text-sm text-gray-500">{description}</p>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          title="Calls"
+          value={data.stats.calls}
+          description="Total AI calls"
+          icon="☎"
+        />
+
+        <StatCard
+          title="Leads"
+          value={data.stats.leads}
+          description="Total leads"
+          icon="◉"
+        />
+
+        <StatCard
+          title="Appointments"
+          value={data.stats.appointments}
+          description="Total appointments"
+          icon="▣"
+        />
+
+        <StatCard
+          title="AI Resolved"
+          value={`${data.stats.aiResolved}%`}
+          description="Resolved without human"
+          icon="✦"
+        />
+      </div>
+
+      <div className="mt-8 grid gap-6 xl:grid-cols-2">
+        <section>
+          <SectionHeader
+            title="Recent Calls"
+            description="Latest conversations handled by Noura."
+          />
+
+          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+            {data.calls.length > 0 ? (
+              <div className="divide-y divide-gray-100">
+                {data.calls.map((call) => (
+                  <div
+                    key={call.id}
+                    className="flex items-center justify-between gap-4 p-4"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-gray-900">
+                        {call.customer?.name || call.customer_phone}
+                      </p>
+
+                      <p className="mt-1 text-xs text-gray-500">
+                        {call.vehicle_interest || "No vehicle"} ·{" "}
+                        {call.customer_intent || "No intent"}
+                      </p>
+
+                      <p className="mt-1 text-xs text-gray-400">
+                        {formatDuration(call.duration_seconds)} ·{" "}
+                        {formatDate(call.created_at)}
+                      </p>
+                    </div>
+
+                    <div className="flex shrink-0 flex-col items-end gap-2">
+                      <StatusBadge status={call.lead_quality} />
+
+                      <StatusBadge status={call.status} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title="No calls yet"
+                description="AI calls handled by Noura will appear here."
+                icon="☎"
+              />
+            )}
+          </div>
+        </section>
+
+        <section>
+          <SectionHeader
+            title="Recent Leads"
+            description="Latest customer opportunities."
+          />
+
+          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+            {data.leads.length > 0 ? (
+              <div className="divide-y divide-gray-100">
+                {data.leads.map((lead) => (
+                  <div
+                    key={lead.id}
+                    className="flex items-center justify-between gap-4 p-4"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-gray-900">
+                        {lead.customer?.name || "Unknown customer"}
+                      </p>
+
+                      <p className="mt-1 text-xs text-gray-500">
+                        {lead.preferred_vehicle || "No vehicle"} ·{" "}
+                        {lead.interest || "No interest"}
+                      </p>
+
+                      <p className="mt-1 text-xs text-gray-400">
+                        Budget:{" "}
+                        {lead.budget
+                          ? `SAR ${lead.budget.toLocaleString()}`
+                          : "Not specified"}
+                      </p>
+                    </div>
+
+                    <StatusBadge status={lead.status} />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState
+                title="No leads yet"
+                description="Leads created through customer conversations will appear here."
+                icon="◉"
+              />
+            )}
+          </div>
+        </section>
+      </div>
+
+      <section className="mt-8">
+        <SectionHeader
+          title="Upcoming Appointments"
+          description="Scheduled customer appointments."
+        />
+
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          {data.appointments.length > 0 ? (
+            <div className="divide-y divide-gray-100">
+              {data.appointments.map((appointment) => (
+                <div
+                  key={appointment.id}
+                  className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">
+                      {appointment.customer?.name || "Unknown customer"}
+                    </p>
+
+                    <p className="mt-1 text-xs text-gray-500">
+                      {appointment.vehicle || "No vehicle"} ·{" "}
+                      {appointment.appointment_type.replace("_", " ")}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-6">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">
+                        {formatDate(appointment.appointment_date)}
+                      </p>
+
+                      <p className="text-xs text-gray-500">
+                        {formatTime(appointment.appointment_time)}
+                      </p>
+                    </div>
+
+                    <StatusBadge status={appointment.status} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState
+              title="No upcoming appointments"
+              description="Scheduled appointments will appear here."
+              icon="▣"
+            />
+          )}
+        </div>
+      </section>
     </div>
   );
 }
