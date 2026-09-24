@@ -18,10 +18,10 @@ export default function RootLayout({
       <body className="bg-gray-50 text-gray-900 antialiased">
         <Sidebar />
 
-        <div className="ml-64 min-h-screen">
+        <div className="min-h-screen md:ml-64">
           <TopBar />
 
-          <main className="p-6">
+          <main className="p-4 sm:p-5 md:p-6">
             {children}
           </main>
         </div>
