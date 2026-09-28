@@ -1,13 +1,100 @@
+// /* eslint-disable @typescript-eslint/no-explicit-any */
+// import Link from "next/link";
+// import { records, recordsWithCustomers } from "@/lib/data";
+// import { CustomerCell, DataNotice, Metric, PageHeading, Panel, Status } from "@/components/dashboard";
+// import { date } from "@/lib/data";
+
+// export default async function Home() {
+//   const [calls, leads, appointments, handoffs] = await Promise.all([recordsWithCustomers("calls", "id, customer_id, customer_phone, duration_seconds, status, vehicle_interest, customer_intent, lead_quality, appointment_booked, needs_human, created_at"), records("leads", "id, customer_id, preferred_vehicle, interest, status, created_at"), records("appointments", "id, customer_id, vehicle, appointment_date, appointment_time, status"), records("tool_calls", "id, customer_id, call_id, input, status, created_at, tool_name")]);
+//   const error = calls.error || leads.error || appointments.error || handoffs.error;
+//   const rows = calls.data; const resolved = rows.filter((c: any) => c.status === "completed").length; const human = rows.filter((c: any) => c.needs_human).length;
+//   const ratio = resolved ? Math.round((Math.max(0, resolved - human) / resolved) * 100) : 0;
+//   return <><PageHeading eyebrow="OVERVIEW" title="Customer operations" description="A live view of your AI customer system."/><div className="dashboard-hero"><div><h2>Good day, 2Bit Motors Saudi</h2><p>Saad is active and ready to assist your customers.</p></div><span className="hero-tag">● &nbsp;AI agent active</span></div><div className="metric-grid"><Metric label="Total Calls" value={calls.data.length} note="All recorded calls" icon="◉"/><Metric label="Total Leads" value={leads.data.length} note="All recorded leads" icon="↗" tone="green"/><Metric label="Appointments" value={appointments.data.length} note="All recorded appointments" icon="▦" tone="violet"/><Metric label="AI Resolved" value={`${ratio}%`} note="Completed calls without human assistance" icon="✦" tone="orange"/></div><div className="grid-two"><Panel title="Recent Calls" action={<Link className="text-link" href="/calls">View all →</Link>}>{rows.length ? <div className="table-wrap"><table><thead><tr><th>Customer</th><th>Vehicle</th><th>Intent</th><th>Status</th></tr></thead><tbody>{rows.slice(0,5).map((row:any)=><tr key={row.id}><td><CustomerCell name={row.customers ? [row.customers.first_name,row.customers.last_name].filter(Boolean).join(" ") || "Unnamed customer" : row.customer_phone || "Unknown customer"} phone={row.customer_phone || row.customers?.phone} /></td><td>{row.vehicle_interest || "—"}</td><td>{row.customer_intent || "—"}</td><td><Status value={row.status}/></td></tr>)}</tbody></table></div>:<div className="quick-empty">No calls recorded yet.</div>}</Panel><Panel title="Human Assistance" action={<Link className="text-link" href="/handoff">Open queue →</Link>}>{handoffs.data.filter((r:any)=>r.tool_name==="human_handoff").slice(0,5).map((r:any)=><div className="quick-list" key={r.id}><div className="quick-item"><span className="quick-icon">↗</span><span><b>{r.input?.reason || r.input?.message || "Assistance requested"}</b><small>{date(r.created_at)}</small></span><Status value={r.status}/></div></div>)}{!handoffs.data.some((r:any)=>r.tool_name==="human_handoff")&&<div className="quick-empty">No assistance requests recorded.</div>}</Panel></div><div className="grid-equal"><Panel title="Recent Leads" action={<Link className="text-link" href="/leads">View all →</Link>}>{leads.data.slice(0,4).map((r:any)=><div className="quick-list" key={r.id}><div className="quick-item"><span className="quick-icon">↗</span><span><b>{r.preferred_vehicle || r.interest || "Lead"}</b><small>{date(r.created_at)}</small></span><Status value={r.status}/></div></div>)}{!leads.data.length&&<div className="quick-empty">No leads recorded yet.</div>}</Panel><Panel title="Upcoming Appointments" action={<Link className="text-link" href="/appointments">View all →</Link>}>{appointments.data.slice(0,4).map((r:any)=><div className="quick-list" key={r.id}><div className="quick-item"><span className="quick-icon">▦</span><span><b>{r.vehicle || r.appointment_type || "Appointment"}</b><small>{r.appointment_date || "—"} · {r.appointment_time || "Time not set"}</small></span><Status value={r.status}/></div></div>)}{!appointments.data.length&&<div className="quick-empty">No appointments recorded yet.</div>}</Panel></div>{error&&<DataNotice error={error}/ >}{calls.customerError&&<DataNotice error={`Customer lookup query failed: ${calls.customerError}`}/ >}{!calls.customerError&&calls.unresolvedCustomers>0&&<DataNotice error={`${calls.unresolvedCustomers} call row(s) reference customers not visible to this Supabase query. Check customer_id and the customers table SELECT policy.`}/>}</>;
+// }
+
+
+"use client";
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { records, recordsWithCustomers } from "@/lib/data";
 import { CustomerCell, DataNotice, Metric, PageHeading, Panel, Status } from "@/components/dashboard";
 import { date } from "@/lib/data";
+import { createClient } from "@supabase/supabase-js";
 
-export default async function Home() {
-  const [calls, leads, appointments, handoffs] = await Promise.all([recordsWithCustomers("calls", "id, customer_id, customer_phone, duration_seconds, status, vehicle_interest, customer_intent, lead_quality, appointment_booked, needs_human, created_at"), records("leads", "id, customer_id, preferred_vehicle, interest, status, created_at"), records("appointments", "id, customer_id, vehicle, appointment_date, appointment_time, status"), records("tool_calls", "id, customer_id, call_id, input, status, created_at, tool_name")]);
-  const error = calls.error || leads.error || appointments.error || handoffs.error;
-  const rows = calls.data; const resolved = rows.filter((c: any) => c.status === "completed").length; const human = rows.filter((c: any) => c.needs_human).length;
+export default function Home() {
+  const [calls, setCalls] = useState<any[]>([]);
+  const [leads, setLeads] = useState<any[]>([]);
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [handoffs, setHandoffs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchOverview() {
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!
+      );
+
+      const [callsRes, leadsRes, appointmentsRes, handoffsRes] = await Promise.all([
+        supabase.from("calls").select("id, customer_id, customer_phone, duration_seconds, status, vehicle_interest, customer_intent, lead_quality, appointment_booked, needs_human, created_at, customers(id, first_name, last_name, phone)").order("created_at", { ascending: false }),
+        supabase.from("leads").select("id, customer_id, preferred_vehicle, interest, status, created_at").order("created_at", { ascending: false }),
+        supabase.from("appointments").select("id, customer_id, vehicle, appointment_date, appointment_time, status").order("created_at", { ascending: false }),
+        supabase.from("tool_calls").select("id, customer_id, call_id, input, status, created_at, tool_name").order("created_at", { ascending: false })
+      ]);
+
+      if (callsRes.error || leadsRes.error || appointmentsRes.error || handoffsRes.error) {
+        setError("Error loading live overview data");
+      }
+
+      setCalls(callsRes.data || []);
+      setLeads(leadsRes.data || []);
+      setAppointments(appointmentsRes.data || []);
+      setHandoffs(handoffsRes.data || []);
+      setLoading(false);
+    }
+    fetchOverview();
+  }, []);
+
+  const resolved = calls.filter((c: any) => c.status === "completed").length; 
+  const human = calls.filter((c: any) => c.needs_human).length;
   const ratio = resolved ? Math.round((Math.max(0, resolved - human) / resolved) * 100) : 0;
-  return <><PageHeading eyebrow="OVERVIEW" title="Customer operations" description="A live view of your AI customer system."/><div className="dashboard-hero"><div><h2>Good day, 2Bit Motors Saudi</h2><p>Saad is active and ready to assist your customers.</p></div><span className="hero-tag">● &nbsp;AI agent active</span></div><div className="metric-grid"><Metric label="Total Calls" value={calls.data.length} note="All recorded calls" icon="◉"/><Metric label="Total Leads" value={leads.data.length} note="All recorded leads" icon="↗" tone="green"/><Metric label="Appointments" value={appointments.data.length} note="All recorded appointments" icon="▦" tone="violet"/><Metric label="AI Resolved" value={`${ratio}%`} note="Completed calls without human assistance" icon="✦" tone="orange"/></div><div className="grid-two"><Panel title="Recent Calls" action={<Link className="text-link" href="/calls">View all →</Link>}>{rows.length ? <div className="table-wrap"><table><thead><tr><th>Customer</th><th>Vehicle</th><th>Intent</th><th>Status</th></tr></thead><tbody>{rows.slice(0,5).map((row:any)=><tr key={row.id}><td><CustomerCell name={row.customers ? [row.customers.first_name,row.customers.last_name].filter(Boolean).join(" ") || "Unnamed customer" : row.customer_phone || "Unknown customer"} phone={row.customer_phone || row.customers?.phone} /></td><td>{row.vehicle_interest || "—"}</td><td>{row.customer_intent || "—"}</td><td><Status value={row.status}/></td></tr>)}</tbody></table></div>:<div className="quick-empty">No calls recorded yet.</div>}</Panel><Panel title="Human Assistance" action={<Link className="text-link" href="/handoff">Open queue →</Link>}>{handoffs.data.filter((r:any)=>r.tool_name==="human_handoff").slice(0,5).map((r:any)=><div className="quick-list" key={r.id}><div className="quick-item"><span className="quick-icon">↗</span><span><b>{r.input?.reason || r.input?.message || "Assistance requested"}</b><small>{date(r.created_at)}</small></span><Status value={r.status}/></div></div>)}{!handoffs.data.some((r:any)=>r.tool_name==="human_handoff")&&<div className="quick-empty">No assistance requests recorded.</div>}</Panel></div><div className="grid-equal"><Panel title="Recent Leads" action={<Link className="text-link" href="/leads">View all →</Link>}>{leads.data.slice(0,4).map((r:any)=><div className="quick-list" key={r.id}><div className="quick-item"><span className="quick-icon">↗</span><span><b>{r.preferred_vehicle || r.interest || "Lead"}</b><small>{date(r.created_at)}</small></span><Status value={r.status}/></div></div>)}{!leads.data.length&&<div className="quick-empty">No leads recorded yet.</div>}</Panel><Panel title="Upcoming Appointments" action={<Link className="text-link" href="/appointments">View all →</Link>}>{appointments.data.slice(0,4).map((r:any)=><div className="quick-list" key={r.id}><div className="quick-item"><span className="quick-icon">▦</span><span><b>{r.vehicle || r.appointment_type || "Appointment"}</b><small>{r.appointment_date || "—"} · {r.appointment_time || "Time not set"}</small></span><Status value={r.status}/></div></div>)}{!appointments.data.length&&<div className="quick-empty">No appointments recorded yet.</div>}</Panel></div>{error&&<DataNotice error={error}/ >}{calls.customerError&&<DataNotice error={`Customer lookup query failed: ${calls.customerError}`}/ >}{!calls.customerError&&calls.unresolvedCustomers>0&&<DataNotice error={`${calls.unresolvedCustomers} call row(s) reference customers not visible to this Supabase query. Check customer_id and the customers table SELECT policy.`}/>}</>;
+
+  if (loading) {
+    return <div style={{ padding: "60px", textAlign: "center", fontSize: "18px", color: "#666" }}>Loading live dashboard overview...</div>;
+  }
+
+  return (
+    <>
+      <PageHeading eyebrow="OVERVIEW" title="Customer operations" description="A live view of your AI customer system."/>
+      <div className="dashboard-hero"><div><h2>Good day, 2Bit Motors Saudi</h2><p>Saad is active and ready to assist your customers.</p></div><span className="hero-tag">● &nbsp;AI agent active</span></div>
+      <div className="metric-grid">
+        <Metric label="Total Calls" value={calls.length} note="All recorded calls" icon="◉"/>
+        <Metric label="Total Leads" value={leads.length} note="All recorded leads" icon="↗" tone="green"/>
+        <Metric label="Appointments" value={appointments.length} note="All recorded appointments" icon="▦" tone="violet"/>
+        <Metric label="AI Resolved" value={`${ratio}%`} note="Completed calls without human assistance" icon="✦" tone="orange"/>
+      </div>
+      <div className="grid-two">
+        <Panel title="Recent Calls" action={<Link className="text-link" href="/calls">View all →</Link>}>
+          {calls.length ? <div className="table-wrap"><table><thead><tr><th>Customer</th><th>Vehicle</th><th>Intent</th><th>Status</th></tr></thead><tbody>{calls.slice(0,5).map((row:any)=><tr key={row.id}><td><CustomerCell name={row.customers ? [row.customers.first_name,row.customers.last_name].filter(Boolean).join(" ") || "Unnamed customer" : row.customer_phone || "Unknown customer"} phone={row.customer_phone || row.customers?.phone} /></td><td>{row.vehicle_interest || "—"}</td><td>{row.customer_intent || "—"}</td><td><Status value={row.status}/></td></tr>)}</tbody></table></div>:<div className="quick-empty">No calls recorded yet.</div>}
+        </Panel>
+        <Panel title="Human Assistance" action={<Link className="text-link" href="/handoff">Open queue →</Link>}>
+          {handoffs.filter((r:any)=>r.tool_name==="human_handoff").slice(0,5).map((r:any)=><div className="quick-list" key={r.id}><div className="quick-item"><span className="quick-icon">↗</span><span><b>{r.input?.reason || r.input?.message || "Assistance requested"}</b><small>{date(r.created_at)}</small></span><Status value={r.status}/></div></div>)}
+          {!handoffs.some((r:any)=>r.tool_name==="human_handoff")&&<div className="quick-empty">No assistance requests recorded.</div>}
+        </Panel>
+      </div>
+      <div className="grid-equal">
+        <Panel title="Recent Leads" action={<Link className="text-link" href="/leads">View all →</Link>}>
+          {leads.slice(0,4).map((r:any)=><div className="quick-list" key={r.id}><div className="quick-item"><span className="quick-icon">↗</span><span><b>{r.preferred_vehicle || r.interest || "Lead"}</b><small>{date(r.created_at)}</small></span><Status value={r.status}/></div></div>)}
+          {!leads.length&&<div className="quick-empty">No leads recorded yet.</div>}
+        </Panel>
+        <Panel title="Upcoming Appointments" action={<Link className="text-link" href="/appointments">View all →</Link>}>
+          {appointments.slice(0,4).map((r:any)=><div className="quick-list" key={r.id}><div className="quick-item"><span className="quick-icon">▦</span><span><b>{r.vehicle || r.appointment_type || "Appointment"}</b><small>{r.appointment_date || "—"} · {r.appointment_time || "Time not set"}</small></span><Status value={r.status}/></div></div>)}
+          {!appointments.length&&<div className="quick-empty">No appointments recorded yet.</div>}
+        </Panel>
+      </div>
+      {error && <DataNotice error={error}/>}
+    </>
+  );
 }
